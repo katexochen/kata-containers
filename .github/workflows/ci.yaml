@@ -1,5 +1,7 @@
 name: Run the Kata Containers CI
 on:
+  push:
+  workflow_dispatch:
   workflow_call:
     inputs:
       commit-hash:

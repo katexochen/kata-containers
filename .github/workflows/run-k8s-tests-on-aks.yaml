@@ -1,5 +1,6 @@
 name: CI | Run kubernetes tests on AKS
 on:
+  workflow_dispatch:
   workflow_call:
     inputs:
       registry:
@@ -88,7 +89,7 @@ jobs:
       - name: Deploy Kata
         timeout-minutes: 10
         run: bash tests/integration/kubernetes/gha-run.sh deploy-kata-aks
-      
+
       - name: Run tests
         timeout-minutes: 60
         run: bash tests/integration/kubernetes/gha-run.sh run-tests
