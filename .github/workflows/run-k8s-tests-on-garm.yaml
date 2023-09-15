@@ -1,6 +1,6 @@
 name: CI | Run kubernetes tests on GARM
 on:
-  workflow_dispatch:
+  push:
   workflow_call:
     inputs:
       registry:
