@@ -1,0 +1,56 @@
+name: CI | Run kubernetes tests on SEV
+description: Run kubernetes tests
+
+inputs:
+  registry:
+    description: Container registry to use
+    required: true
+  repo:
+    description: Container repository to use
+    required: true
+  tag:
+    description: Container tag to use
+    required: true
+  test:
+    description: Test to run
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ inputs.commit-hash }}
+        fetch-depth: 0
+
+    - name: Setup test parameters
+      id: parameters
+      shell: bash
+      run: |
+        case "${{ inputs.test }}" in
+          "sev")
+
+
+            ;;
+          *)
+            echo "Unknown test: ${{ inputs.test }}"
+            exit 1
+            ;;
+        esac
+
+    - name: Deploy Kata
+      shell: bash
+      run: bash tests/integration/kubernetes/gha-run.sh deploy-kata-sev
+
+    - name: Run tests
+      shell: bash
+      env:
+        DOCKER_REGISTRY: ${{ inputs.registry }}
+        DOCKER_REPO: ${{ inputs.repo }}
+        DOCKER_TAG: ${{ inputs.tag }}
+      run: bash tests/integration/kubernetes/gha-run.sh run-tests
+
+    - name: Delete kata-deploy
+      shell: bash
+      if: always()
+      run: bash tests/integration/kubernetes/gha-run.sh cleanup-sev

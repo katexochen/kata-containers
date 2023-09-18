@@ -1,28 +1,124 @@
 name: Run the Kata Containers CI
 on:
-  workflow_call:
-    inputs:
-      commit-hash:
-        required: true
-        type: string
-      pr-number:
-        required: true
-        type: string
-      tag:
-        required: true
-        type: string
-      target-branch:
-        required: false
-        type: string
-        default: ""
+  pull_request:
+    types:
+    # Adding 'labeled' to the list of activity types that trigger this event
+    # (default: opened, synchronize, reopened) so that we can run this
+    # workflow when the 'ok-to-test' label is added.
+    # Reference: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request_target
+    - opened
+    - synchronize
+    - reopened
+    - labeled
+    paths-ignore:
+      - 'docs/**'
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build-kata-static-tarball-amd64:
-    uses: ./.github/workflows/build-kata-static-tarball-amd64.yaml
-    with:
-      tarball-suffix: -${{ inputs.tag }}
-      commit-hash: ${{ inputs.commit-hash }}
-      target-branch: ${{ inputs.target-branch }}
+  metadata:
+    runs-on: ubuntu-latest
+    outputs:
+      ok-to-test: ${{ steps.metadata.outputs.ok-to-test }}
+      commit-hash: ${{ steps.metadata.outputs.commit-hash }}
+      pr-number: ${{ steps.metadata.outputs.pr-number }}
+      tag: ${{ steps.metadata.outputs.tag }}
+      target-branch: ${{ steps.metadata.outputs.target-branch }}
+    steps:
+      - name: Evaluate metadata
+        id: metadata
+        run: |
+          if [[ ${{ github.event_name }} == 'scheduled' ]]; then
+            echo "ok-to-test=false" | tee -a "$GIHUB_OUTPUT"
+            echo "commit-hash=${{ github.sha }}" | tee -a "$GIHUB_OUTPUT"
+            echo "pr-number=nightly" | tee -a "$GIHUB_OUTPUT"
+            echo "tag=${{ github.sha }}-nighly" | tee -a "$GIHUB_OUTPUT"
+            echo "target-branch=${{ github.ref_name }}" | tee -a "$GIHUB_OUTPUT"
+            exit 0
+          fi
+
+          hasPullRequestTrigger="${{ github.event_name == 'pull_request' }}"
+          hasOKLabel="${{ contains(github.event.pull_request.labels.*.name, 'ok-to-test') }}"
+          if [[ hasPullRequestTrigger == 'true' && hasOKLabel == 'true' ]]; then
+            echo "ok-to-test=true" | tee -a "$GIHUB_OUTPUT"
+            echo "commit-hash=${{ github.event.pull_request.head.sha }}" | tee -a "$GIHUB_OUTPUT"
+            echo "pr-number=${{ github.event.pull_request.number }}" | tee -a "$GIHUB_OUTPUT"
+            echo "tag=pr${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}" | tee -a "$GIHUB_OUTPUT"
+            echo "target-branch=${{ github.event.pull_request.base.ref }}" | tee -a "$GIHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "ok-to-test=false" | tee -a "$GIHUB_OUTPUT"
+
+  build-kata-static-assets:
+    needs: [ metadata ]
+    if: ${{ needs.metadata.outputs.ok-to-test == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - arm64
+          - s390x
+        asset:
+          - cloud-hypervisor
+          - cloud-hypervisor-glibc
+          - firecracker
+          - kernel
+          - kernel-sev
+          - kernel-dragonball-experimental
+          - kernel-tdx-experimental
+          - kernel-nvidia-gpu
+          - kernel-nvidia-gpu-snp
+          - kernel-nvidia-gpu-tdx-experimental
+          - nydus
+          - ovmf
+          - ovmf-sev
+          - qemu
+          - qemu-snp-experimental
+          - qemu-tdx-experimental
+          - rootfs-image
+          - rootfs-image-tdx
+          - rootfs-initrd
+          - rootfs-initrd-mariner
+          - rootfs-initrd-sev
+          - shim-v2
+          - tdvf
+          - virtiofsd
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: ./.github/actions/build-kata-static-assets
+        with:
+          tarball-suffix: ${{ needs.metadata.outputs.tag }}
+          commit-hash: ${{ needs.metadata.outputs.commit-hash }}
+          target-branch: ${{ needs.metadata.outputs.target-branch }}
+          assert: ${{ matrix.asset }}
+
+  create-kata-static-tarball:
+    needs: [ metadata, build-kata-static-assets ]
+    if: ${{ needs.metadata.outputs.ok-to-test == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - arm64
+          - s390x
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ./.github/actions/create-kata-static-tarball
+        with:
+          tarball-suffix: ${{ needs.metadata.outputs.tag }}
+          registry: ghcr.io
+          repo: ${{ github.repository_owner }}/kata-deploy-ci
+          tag: ${{ needs.metadata.outputs.tag }}-${{ matrix.os }}
+          commit-hash: ${{ needs.metadata.outputs.commit-hash }}
+          target-branch: ${{ needs.metadata.outputs.target-branch }}
 
   publish-kata-deploy-payload-amd64:
     needs: build-kata-static-tarball-amd64

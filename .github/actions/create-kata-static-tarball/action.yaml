@@ -1,0 +1,38 @@
+name: CI | Create kata-static tarball
+description: "Create kata-static tarball"
+
+inputs:
+  commit-hash:
+    description: ""
+  tarball-suffix:
+    description: ""
+    required: true
+  arch:
+    description: ""
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ inputs.commit-hash }}
+        fetch-depth: 0
+
+    - name: get-artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: kata-artifacts-${{ inputs.arch }}-${{ inputs.tarball-suffix }}
+        path: kata-artifacts
+
+    - name: merge-artifacts
+      shell: bash
+      run: |
+        ./tools/packaging/kata-deploy/local-build/kata-deploy-merge-builds.sh kata-artifacts versions.yaml
+
+    - name: store-artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: kata-static-tarball-${{ inputs.arch }}-${{ inputs.tarball-suffix }}
+        path: kata-static.tar.xz
+        retention-days: 1
+        if-no-files-found: error
