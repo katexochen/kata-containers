@@ -1584,15 +1584,16 @@ async fn read_stream(reader: &Mutex<ReadHalf<PipeStream>>, l: usize) -> Result<V
 
 pub fn start(s: Arc<Mutex<Sandbox>>, server_address: &str, init_mode: bool) -> Result<TtrpcServer> {
     // Create the socket directory if it doesn't exist.
-    let sockpath = String::from(addr)
+    let socket_addr = String::from(server_address);
+    let socket_path = socket_addr
         .split_once("://")
-        .ok_or_else(|| anyhow!("cannot split path from socket addr {}", addr))?
+        .ok_or_else(|| anyhow!("cannot split path from socket addr {}", server_address))?
         .1;
-    let sockdir = Path::new(sockpath)
+    let socket_dir = Path::new(socket_path)
         .parent()
-        .ok_or_else(|| anyhow!("cannot get basedir from socket addr {}", addr))?;
-    if !sockdir.exists() {
-        let _ = fs::create_dir_all(sockdir)?;
+        .ok_or_else(|| anyhow!("cannot get basedir from socket addr {}", server_address))?;
+    if !socket_dir.exists() {
+        fs::create_dir_all(socket_dir)?;
     }
 
     let agent_service = Box::new(AgentService {
