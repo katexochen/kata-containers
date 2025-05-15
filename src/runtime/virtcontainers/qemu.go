@@ -435,24 +435,12 @@ func (q *qemu) buildDevices(ctx context.Context, kernelPath string) ([]govmmQemu
 		return nil, nil, nil, err
 	}
 
-	assetPath, assetType, err := q.config.ImageOrInitrdAssetPath()
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	if assetType == types.ImageAsset {
-		devices, err = q.arch.appendImage(ctx, devices, assetPath)
+	devices, err = q.arch.appendImage(ctx, devices, q.config.ImagePath)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-	} else if assetType == types.InitrdAsset {
-		// InitrdAsset, need to set kernel initrd path
-		kernel.InitrdPath = assetPath
-	} else if assetType == types.SecureBootAsset {
-		// SecureBootAsset, no need to set image or initrd path
-		q.Logger().Info("For IBM Z Secure Execution, initrd path should not be set")
-		kernel.InitrdPath = ""
-	}
+
+	kernel.InitrdPath = q.config.InitrdPath
 
 	if q.config.IOMMU {
 		devices, err = q.arch.appendIOMMU(devices)
