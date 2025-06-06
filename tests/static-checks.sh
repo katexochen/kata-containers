@@ -1362,6 +1362,24 @@ static_check_dockerfiles()
 	popd
 }
 
+static_check_rego()
+{
+	local rego_files
+	rego_files=$(git ls-files | grep -E '.*\.rego$')
+
+	found_unparsable=0
+	for file in ${rego_files}
+	do
+		if ! opa parse "${file}" > /dev/null; then
+			info "Failed to parse Rego file '${file}'"
+			found_unparsable=1
+		fi
+	done
+	if [[ ${found_unparsable} -ne 0 ]]; then
+		die "Failed to parse one or more Rego files with OPA"
+	fi
+}
+
 # Run the specified function (after first checking it is compatible with the
 # users architectural preferences), or simply list the function name if list
 # mode is active.
@@ -1505,6 +1523,7 @@ main()
 			--list) list_only="true" ;;
 			--no-arch) handle_funcs="arch-agnostic" ;;
 			--only-arch) handle_funcs="arch-specific" ;;
+			--rego) func=static_check_rego ;;
 			--repo) repo="$2"; shift ;;
 			--scripts) func=static_check_shell ;;
 			--vendor) func=static_check_vendor;;
